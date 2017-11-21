@@ -39,8 +39,8 @@ class Image2d(object):
         self.ifd = ifd
 
         tags = self.tags
-        height = tags.get('image_length', [0])[0]
-        width = tags.get('image_width', [0])[0]
+        height = tags['image_length'][0]
+        width = tags['image_width'][0]
 
         self.write_image = np.ma.masked_all([height, width, self.n_channels])
 
@@ -60,6 +60,14 @@ class Image2d(object):
             else:
                 tags[entry.tag.name] = entry.external_values.array
 
+        tags['sample_format'] = tags.get('sample_format', [1])
+        tags['strip_offsets'] = tags.get('strip_offsets', [])
+        tags['strip_byte_counts'] = tags.get('strip_byte_counts', [])
+        tags['compression'] = tags.get('compression', [1])
+        tags['image_width'] = tags.get('image_width', [0])
+        tags['rows_per_strip'] = tags.get('rows_per_strip', [])
+        tags['image_length'] = tags.get('image_length', [0])
+
         return tags
 
     @property
@@ -72,7 +80,7 @@ class Image2d(object):
             endian.le: '<',
         }[endian]
 
-        typ = tags.get('sample_format', [1])[0]
+        typ = tags['sample_format'][0]
         typ = {
              1: 'u',
              2: 'i',
@@ -86,9 +94,9 @@ class Image2d(object):
     def strips(self):
         '''List of Strips (data slices) for this image'''
         tags = self.tags
-        strip_offsets = tags.get('strip_offsets', [])
-        strip_byte_counts = tags.get('strip_byte_counts', [])
-        compression = tags.get('compression', [1])*len(strip_offsets)
+        strip_offsets = tags['strip_offsets']
+        strip_byte_counts = tags['strip_byte_counts']
+        compression = tags['compression']*len(strip_offsets)
 
         if strip_offsets is None or strip_byte_counts is None:
             return []
@@ -109,7 +117,7 @@ class Image2d(object):
             strip_list.append(strip.read(self.dtype_tif))
 
         data = np.concatenate(strip_list)
-        data = data.reshape([-1, tags.get('image_width', [0])[0], self.n_channels])
+        data = data.reshape([-1, tags['image_width'][0], self.n_channels])
 
         slices = list(slices)
         slices[0] = slice(slices[0].start - first_row, slices[0].stop - first_row, slices[0].step)
@@ -121,8 +129,8 @@ class Image2d(object):
         Iterate over strips that include rows from start_row to stop_row
         '''
         tags = self.tags
-        strip_offsets = tags.get('strip_offsets', [])
-        rows_per_strip = tags.get('rows_per_strip', [])
+        strip_offsets = tags['strip_offsets']
+        rows_per_strip = tags['rows_per_strip']
 
         if len(rows_per_strip) == len(strip_offsets) - 1:
             # last strip is missing
@@ -169,8 +177,8 @@ class Image2d(object):
     def memmap(self):
         '''Returns an `numpy.memmap()`-ed array of the image'''
         tags = self.tags
-        H = tags.get('image_length', [0])[0]
-        W = tags.get('image_width', [0])[0]
+        H = tags['image_length'][0]
+        W = tags['image_width'][0]
         C = self.n_channels
 
         strips = self.strips
