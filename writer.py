@@ -1,16 +1,40 @@
+import io
 import sys
 import struct
 
 import tif_format
 
 class Writer(object):
-    def __init__(self, endian=None):
+    def __init__(self, io, endian=None):
+        '''io: either io.BytesIO or io.BufferedWriter'''
         endian = endian or sys.byteorder
 
         if endian in '<>!=@':
             self.endian = endian
         else:
             self.endian = '<' if endian.startswith('l') else '>'
+
+        self.io = io
+
+    def close(self):
+        self.io.close()
+
+    def __len__(self):
+        if type(self.io) == io.BytesIO:
+            return len(self.io.getbuffer())
+        elif type(self.io) == io.BufferedWriter:
+            return self.io.tell()
+        else:
+            raise NotImplemented
+
+    def get_bytes(self):
+        if type(self.io) == io.BytesIO:
+            return self.io.getbuffer()
+        else:
+            raise NotImplemented
+
+    def write_bytes(self, buf):
+        self.io.write(buf)
 
     def write_u16(self, v):
         return self.pack('?H', v)
@@ -36,8 +60,18 @@ class Writer(object):
     def write_f64(self, v):
         return self.pack('?d', v)
 
+    def write_hole(self, length):
+        if type(self.io) == io.BytesIO:
+            return self.write(b'\0' * length)
+        elif type(self.io) == io.BufferedWriter:
+            self.io.seek(length - 1, io.SEEK_CUR)
+            res = self.io.write(b'\0')
+            assert res != -1
+        else:
+            raise NotImplemented
+
     def pack(self, fmt, *v):
-        return struct.pack(fmt.replace('?', self.endian), *v)
+        self.io.write(struct.pack(fmt.replace('?', self.endian), *v))
 
     def write_tag_value(self, typ, v, offset):
         TagType = tif_format.TifFormat.TagType

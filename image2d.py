@@ -38,6 +38,19 @@ class Image2d(object):
     def __init__(self, ifd):
         self.ifd = ifd
 
+        tags = self.tags
+        height = tags.get('image_length', [0])[0]
+        width = tags.get('image_width', [0])[0]
+
+        self.write_image = np.ma.masked_all([height, width, self.n_channels])
+
+
+    @property
+    def n_channels(self):
+        channels = len(self.tags.get('samples_per_pixel', [1]))
+        return channels
+
+
     @property
     def tags(self):
         tags = {}
@@ -56,10 +69,10 @@ class Image2d(object):
         endian = self.ifd._root.endian
         endian = {
             endian.be: '>',
-            endian.le: '>',
+            endian.le: '<',
         }[endian]
 
-        typ = tags['sample_format'][0]
+        typ = tags.get('sample_format', [1])[0]
         typ = {
              1: 'u',
              2: 'i',
@@ -67,10 +80,11 @@ class Image2d(object):
         }[typ]
 
         length = np.ceil(tags['bits_per_sample'][0] / 8.0)
-        return '{}{}{}'.format(endian, typ, int(length))
+        return np.dtype('{}{}{}'.format(endian, typ, int(length)))
 
     @property
     def strips(self):
+        '''List of Strips (data slices) for this image'''
         tags = self.tags
         strip_offsets = tags.get('strip_offsets', [])
         strip_byte_counts = tags.get('strip_byte_counts', [])
@@ -84,10 +98,29 @@ class Image2d(object):
 
 
     def __getitem__(self, slices):
+        '''Get image data (use three indices: H, W, C)'''
         assert len(slices) == 3
 
-        tags = self.tags
+        first_row = None
+        strip_list = []
+        for i, strip, strip_start, strip_stop in strip_iterator((slices[0].start or 0),
+                                                                (slices[0].stop or tags['image_length'])):
+            first_row = first_row or strip_start
+            strip_list.append(strip.read(self.dtype_tif))
 
+        data = np.concatenate(strip_list)
+        data = data.reshape([-1, tags.get('image_width', [0])[0], self.n_channels])
+
+        slices = list(slices)
+        slices[0] = slice(slices[0].start - first_row, slices[0].stop - first_row, slices[0].step)
+        return data[slices[0], slices[1], slices[2]]
+
+
+    def strip_iterator(self, start_row, stop_row):
+        '''
+        Iterate over strips that include rows from start_row to stop_row
+        '''
+        tags = self.tags
         strip_offsets = tags.get('strip_offsets', [])
         rows_per_strip = tags.get('rows_per_strip', [])
 
@@ -102,24 +135,52 @@ class Image2d(object):
         start_row_per_strip = np.hstack([[0], np.cumsum(rows_per_strip[:-1])])
         end_row_per_strip = start_row_per_strip + rows_per_strip
 
-        first = None
-        strip_list = []
-        for strip, strip_start, strip_stop in zip(self.strips, start_row_per_strip, end_row_per_strip):
-            if strip_start <= (slices[0].start or 0):
-                if strip_start <= (slices[0].stop or tags['image_length']):
-                    first = first or strip_start
-                    strip_list.append(strip.read(self.dtype))
+        for i, strip, strip_start, strip_stop in enumerate(zip(self.strips, start_row_per_strip, end_row_per_strip)):
+            if strip_start <= start_row:
+                if strip_start <= stop_row:
+                    yield i, strip, strip_start, strip_stop
                 else:
                     break
 
-        channels = tags.get('samples_per_pixel', [1])[0]
-        if len(strip_list) == 0:
-            return np.array([]).reshape([0,0, channels])
 
-        data = np.concatenate(strip_list)
-        data = data.reshape([-1, tags.get('image_width', [0])[0], channels])
+    def __setitem__(self, slices, values):
+        '''use self.memmap() instead'''
+        raise NotImplemented
 
-        slices = list(slices)
-        slices[0] = slice(slices[0].start - first, slices[0].stop - first, slices[0].step)
-        return data[slices[0], slices[1], slices[2]]
+
+    def flush(self):
+        '''
+        Write assignments done using __setitem__() to disk.
+        '''
+        tags = self.tags
+        width = tags['image_length']
+
+        edges = np.ma.notmasked_edges(self.write_image, axis=0)
+        if edges is None:
+            return
+
+        for row_start, row_stop in edges:
+            first_row = None
+            for i, strip, strip_start, strip_end in strip_iterator(row_start, row_stop):
+                assert tags['compression'][i] == 1
+                first_row = first_row or stip_start
+
+
+    def memmap(self):
+        '''Returns an `numpy.memmap()`-ed array of the image'''
+        tags = self.tags
+        H = tags.get('image_length', [0])[0]
+        W = tags.get('image_width', [0])[0]
+        C = self.n_channels
+
+        strips = self.strips
+        if len(strips) != 1:
+            raise NotImplemented('Cannot memmap images with more than one strip')
+
+        if strips[0].compression != 1:
+            raise NotImplemented('Cannot memmap compressed images')
+
+        array = np.memmap(strips[0].io._io, mode='r+', dtype=self.dtype,
+                          shape=(H,W,C), offset=strips[0].offset)
+        return array
 
