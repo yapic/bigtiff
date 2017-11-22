@@ -53,20 +53,22 @@ class Image2d(object):
 
     @property
     def tags(self):
-        tags = {}
-        for i, entry in enumerate(self.ifd.entries):
+        tags = {
+            'samples_per_pixel': [1],
+            'sample_format': [1],
+            'strip_offsets': [],
+            'strip_byte_counts': [],
+            'compression': [1],
+            'image_width': [0],
+            'rows_per_strip': [],
+            'image_length': [0],
+        }
+
+        for entry in self.ifd.entries:
             if entry.is_value:
                 tags[entry.tag.name] = entry.values.array
             else:
                 tags[entry.tag.name] = entry.external_values.array
-
-        tags['sample_format'] = tags.get('sample_format', [1])
-        tags['strip_offsets'] = tags.get('strip_offsets', [])
-        tags['strip_byte_counts'] = tags.get('strip_byte_counts', [])
-        tags['compression'] = tags.get('compression', [1])
-        tags['image_width'] = tags.get('image_width', [0])
-        tags['rows_per_strip'] = tags.get('rows_per_strip', [])
-        tags['image_length'] = tags.get('image_length', [0])
 
         return tags
 
@@ -152,14 +154,17 @@ class Image2d(object):
 
 
     def __setitem__(self, slices, values):
-        '''use self.memmap() instead'''
+        '''Use self.memmap() instead'''
         raise NotImplemented
 
 
     def flush(self):
         '''
-        Write assignments done using __setitem__() to disk.
+        Use self.memmap() instead.
+        (Write assignments done using __setitem__() to disk)
         '''
+        raise NotImplemented
+
         tags = self.tags
         width = tags['image_length']
 
