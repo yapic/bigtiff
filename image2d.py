@@ -20,12 +20,6 @@ class Image2dIterator(object):
         return Image2d(ifd)
 
 
-def if_none(value, optional):
-    if value is None:
-        return optional
-    else:
-        return value
-
 class Image2d(object):
     '''
     This represents one image in the TIF file.
@@ -42,7 +36,7 @@ class Image2d(object):
         height = tags['image_length'][0]
         width = tags['image_width'][0]
 
-        self.write_image = np.ma.masked_all([height, width, self.n_channels])
+        # self.write_image = np.ma.masked_all([height, width, self.n_channels])
 
 
     @property
@@ -72,6 +66,7 @@ class Image2d(object):
 
         return tags
 
+
     @property
     def dtype(self):
         tags = self.tags
@@ -92,23 +87,28 @@ class Image2d(object):
         length = np.ceil(tags['bits_per_sample'][0] / 8.0)
         return np.dtype('{}{}{}'.format(endian, typ, int(length)))
 
+
     @property
     def strips(self):
         '''List of Strips (data slices) for this image'''
         tags = self.tags
         strip_offsets = tags['strip_offsets']
         strip_byte_counts = tags['strip_byte_counts']
-        compression = tags['compression']*len(strip_offsets)
 
         if strip_offsets is None or strip_byte_counts is None:
             return []
 
-        return [Strip(self.ifd._io, offset, length, compr)
-                for offset, length, compr in zip(strip_offsets, strip_byte_counts, compression)]
+        compression = tags['compression'] * len(strip_offsets)
+
+        return [ Strip(self.ifd._io, offset, length, compr)
+                 for offset, length, compr in zip(strip_offsets, strip_byte_counts, compression) ]
 
 
     def __getitem__(self, slices):
-        '''Get image data (use three indices: H, W, C)'''
+        '''
+        Deprecated: Use self.memmap() instead.
+        Get image data (use three indices: H, W, C).
+        '''
         assert len(slices) == 3
 
         first_row = None
@@ -154,14 +154,14 @@ class Image2d(object):
 
 
     def __setitem__(self, slices, values):
-        '''Use self.memmap() instead'''
+        '''Deprecated: Use self.memmap() instead'''
         raise NotImplemented
 
 
     def flush(self):
         '''
-        Use self.memmap() instead.
-        (Write assignments done using __setitem__() to disk)
+        Deprecated: Use self.memmap() instead.
+        Write assignments done using __setitem__() to disk.
         '''
         raise NotImplemented
 
