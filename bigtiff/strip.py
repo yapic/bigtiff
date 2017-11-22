@@ -1,6 +1,6 @@
 import numpy as np
 
-import lzw_decompress
+import bigtiff_lzw_decompress
 
 class Strip(object):
     def __init__(self, io, offset, length, compression):

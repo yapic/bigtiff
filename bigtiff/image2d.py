@@ -3,8 +3,8 @@ import itertools
 
 import numpy as np
 
-import tif_format
-from strip import Strip
+import bigtiff.tif_format
+from bigtiff.strip import Strip
 
 class Image2dIterator(object):
     def __init__(self, first_ifd):

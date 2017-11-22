@@ -3,12 +3,12 @@ import io as _io
 
 import numpy as np
 
-import tif_format
+import bigtiff.tif_format as tif_format
 from kaitaistruct import KaitaiStream
 
-from image2d import Image2dIterator
-from writer import Writer
-import representation
+from bigtiff.image2d import Image2dIterator
+from bigtiff.writer import Writer
+from bigtiff import representation
 
 class Tiff(tif_format.TifFormat):
     def __iter__(self):

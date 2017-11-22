@@ -3,7 +3,7 @@ import unittest
 
 import numpy as np
 
-from tiff import Tiff, PlaceHolder
+from bigtiff import Tiff, PlaceHolder
 
 FILENAME = '/tmp/foo.tif'
 

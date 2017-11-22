@@ -2,7 +2,7 @@ import io
 import sys
 import struct
 
-import tif_format
+import bigtiff.tif_format as tif_format
 
 class Writer(object):
     def __init__(self, io, endian=None):
