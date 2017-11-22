@@ -8,7 +8,6 @@ from kaitaistruct import KaitaiStream
 
 from image2d import Image2dIterator
 from writer import Writer
-#from file_writer import FileWriter
 import representation
 
 class Tiff(tif_format.TifFormat):
@@ -17,6 +16,7 @@ class Tiff(tif_format.TifFormat):
             return Image2dIterator(self.header.first_ifd)
         else:
             return Image2dIterator(self.header.first_ifd_big_tiff)
+
 
     @classmethod
     def from_file(cls, filename, closefd=True):
@@ -30,6 +30,7 @@ class Tiff(tif_format.TifFormat):
 
         if closefd:
             f.close()
+
 
     @classmethod
     def write(cls, images, io=None, big_tiff=True, closefd=True):
@@ -48,29 +49,27 @@ class Tiff(tif_format.TifFormat):
             io = Writer(io)
 
         if sys.byteorder == 'little':
-            io.write_u16(0x4949) # 'II'
+            io.write_bytes(b'II')
         else:
-            io.write_u16(0x4d4d) # 'MM'
+            io.write_bytes(b'MM')
 
         if big_tiff:
             offset_width = 8
             write_offset = io.write_u64
-            io.write_u16(43)
+            io.write_u16(43) # magic
             io.write_u16(8) # offset width
             io.write_u16(0)
         else:
             offset_width = 4
             write_offset = io.write_u32
-            io.write_u16(42)
+            io.write_u16(42) # magic
 
         next_ifd_position = len(io) + 8
         write_offset(next_ifd_position)
 
         for i, img in enumerate(images):
-            io_ifd = Writer(_io.BytesIO())
             io_data = Writer(_io.BytesIO())
-            cls._write_image(io_ifd, io_data, img, len(io), big_tiff)
-            io.write_bytes(io_ifd.get_bytes())
+            cls._write_image(io, io_data, img, len(io), big_tiff)
 
             if i == len(images) - 1:
                 next_ifd_position = 0
@@ -126,9 +125,11 @@ class Tiff(tif_format.TifFormat):
                 (Tag.rows_per_strip, TagType.u4, [height]),
                 ]
         tags = sorted(tags, key=lambda t: t[0].value)
-        ifd_len = offset_width + (len(tags) + 1) * (20 if big_tiff else 12) + offset_width # the +1 is for strip_offsets which we write later
 
+        # the len(tags) + 1 is for strip_offsets which we write later
+        ifd_len = offset_width + (len(tags) + 1) * (20 if big_tiff else 12) + offset_width
         write_offset(len(tags) + 1)
+
         for t in tags:
             offset = total_offset + ifd_len + len(io_data)
             io_now = Writer(_io.BytesIO())
@@ -141,11 +142,7 @@ class Tiff(tif_format.TifFormat):
         t = (Tag.strip_offsets, offset_type, strip_offsets)
         offset = total_offset + ifd_len + len(io_data)
 
-        io_now = Writer(_io.BytesIO())
-        io_later = Writer(_io.BytesIO())
-        cls._write_tag(io_now, io_later, t, offset, big_tiff)
-        io_ifd.write_bytes(io_now.get_bytes())
-        io_data.write_bytes(io_later.get_bytes())
+        cls._write_tag(io_ifd, io_data, t, offset, big_tiff)
 
         return io_ifd, io_data
 
@@ -163,7 +160,6 @@ class Tiff(tif_format.TifFormat):
             write_offset = io_now.write_u32
 
         kind, typ, values = tag
-
         old_now_len = len(io_now)
 
         io_now.write_u16(kind.value)
@@ -218,7 +214,6 @@ class PlaceHolder(object):
     @property
     def nbytes(self):
         return self.dtype.itemsize * self.size
-
 
 
 if __name__ == '__main__':
