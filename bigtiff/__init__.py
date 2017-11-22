@@ -1,0 +1,2 @@
+from tiff import TIFF
+
