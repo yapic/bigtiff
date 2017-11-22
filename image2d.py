@@ -32,7 +32,7 @@ class Image2d(object):
 
     WARNING:
     Although this class is called Image2d it can either be a grayscale image
-    dim=(X,Y,1) or a RGB image dim=(X,Y,1).
+    dim=(X,Y,1) or a RGB image dim=(X,Y,3).
     This is due to the way TIFF saves the images in the file.
     '''
     def __init__(self, ifd):
