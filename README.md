@@ -16,8 +16,10 @@ Tiff.write(images, io=fname)
 # assign a pixels
 with Tiff.from_file(fname) as tif:
     for img in tif:
-        print(img.tags)
+        print(img.tags) # dict with tags for this image
+
         arr = img.memmap()
+        print(arr.shape)
         arr[5000,5000,0] = 99
 ```
 
