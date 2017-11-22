@@ -47,7 +47,7 @@ class Image2d(object):
 
     @property
     def n_channels(self):
-        channels = len(self.tags.get('samples_per_pixel', [1]))
+        channels = len(self.tags['samples_per_pixel'])
         return channels
 
 
