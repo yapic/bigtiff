@@ -1,5 +1,7 @@
+import re
 import sys
 import itertools
+from collections import OrderedDict
 
 import numpy as np
 
@@ -33,16 +35,44 @@ class Image2d(object):
         self.ifd = ifd
 
         tags = self.tags
-        height = tags['image_length'][0]
-        width = tags['image_width'][0]
+        self.height = tags['image_length'][0]
+        self.width = tags['image_width'][0]
 
         # self.write_image = np.ma.masked_all([height, width, self.n_channels])
 
 
     @property
     def n_channels(self):
-        channels = len(self.tags['samples_per_pixel'])
+        channels = self.tags['samples_per_pixel'][0]
         return channels
+
+
+    @property
+    def axes(self):
+        desc = self.tags['image_description'][0].string
+
+        images = re.search('images=([0-9])+', desc)
+        channels = re.search('channels=([0-9])+', desc)
+        slices = re.search('slices=([0-9])+', desc)
+        frames = re.search('frames=([0-9])+', desc)
+
+        axes = [('X', -3, self.width), ('Y', -2, self.height)]
+        if channels:
+            axes.append(('C', channels.start(), channels.group(1)))
+        else:
+            axes.append(('C', -1, self.n_channels))
+        if slices:
+            axes.append(('Z', slices.start(), slices.group(1)))
+        if frames:
+            axes.append(('T', frames.start(), frames.group(1)))
+
+        axes = OrderedDict((a, int(value)) for a, start, value in sorted(axes, key=lambda pair: pair[1]))
+        return axes
+
+
+    @property
+    def shape(self):
+        return (self.width, self.height, self.n_channels)
 
 
     @property
@@ -187,11 +217,16 @@ class Image2d(object):
         C = self.n_channels
 
         strips = self.strips
-        if len(strips) != 1:
-            raise NotImplemented('Cannot memmap images with more than one strip')
+        pos = strips[0].offset
+        for s in strips:
+            if pos != s.offset:
+                msg = 'Cannot memmap non-consecutive image strips (image has {} strips)'
+                raise NotImplementedError(msg.format(len(strips)))
+
+            pos += s.length
 
         if strips[0].compression != 1:
-            raise NotImplemented('Cannot memmap compressed images')
+            raise NotImplementedError('Cannot memmap compressed images')
 
         array = np.memmap(strips[0].io._io, mode='r+', dtype=self.dtype,
                           shape=(H,W,C), offset=strips[0].offset)
