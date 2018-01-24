@@ -119,6 +119,7 @@ class Tiff(tif_format.TifFormat):
                 (Tag.compression, TagType.u2, [1]),
                 (Tag.bits_per_sample, TagType.u2, [img.dtype.itemsize * 8]),
                 (Tag.sample_format, TagType.u2, [kind]),
+                (Tag.samples_per_pixel, TagType.u2, [channels]),
                 (Tag.x_resolution, TagType.u_ratio, [(1, 1)]),
                 (Tag.y_resolution, TagType.u_ratio, [(1, 1)]),
                 (Tag.strip_byte_counts, TagType.u4, [img.nbytes]),
