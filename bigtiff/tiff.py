@@ -1,5 +1,6 @@
 import sys
 import io as _io
+import contextlib
 
 import numpy as np
 
@@ -17,10 +18,9 @@ class Tiff(tif_format.TifFormat):
         else:
             return Image2dIterator(self.header.first_ifd_big_tiff)
 
-
     @classmethod
     def from_file(cls, filename, closefd=True):
-        f = open(filename, 'br+') # we need write permission for memmap
+        f = open(str(filename), 'br+') # we need write permission for memmap
         try:
             return cls(KaitaiStream(f))
         except Exception:
@@ -31,15 +31,56 @@ class Tiff(tif_format.TifFormat):
         if closefd:
             f.close()
 
+    @classmethod
+    def memmap_tcz(cls, filename, closefd=False):
+        slices = [ s for s in cls.from_file(filename) ]
+
+        axes = slices[0].axes.copy()
+        ax_keys = list(axes.keys())
+        assert 'X', 'Y' in ax_keys[-2:] # the plane must be XY or YX
+
+        if ax_keys[-2:] == ('Y', 'X'):
+            t = lambda s: s.T
+        else:
+            t = lambda s: s
+
+        samples_per_pixel = slices[0].tags['samples_per_pixel'][0]
+
+        # we must trick numpy to create an array of objects
+        new = np.ascontiguousarray(['x'] * len(slices) * samples_per_pixel, dtype=np.dtype(object))
+        import itertools
+        for i, s in enumerate(slices):
+            if samples_per_pixel == 1:
+                new[i] = t(s.memmap())
+            else:
+                for j in range(samples_per_pixel):
+                    new[i * samples_per_pixel + j] = t(s.memmap()[:,:,j])
+        new = np.reshape(new, list(axes.values())[:-2], order='F')
+        slices = new
+
+        for x in 'ZCT':
+            if x not in ax_keys:
+                ax_keys = [x] + ax_keys
+
+        T = ax_keys.index('T')
+        C = ax_keys.index('C')
+        Z = ax_keys.index('Z')
+
+        while slices.ndim < 3:
+            slices = np.expand_dims(slices, 0)
+
+        slices = np.moveaxis(slices, (T,C,Z), (0,1,2))
+        return slices
 
     @classmethod
-    def write(cls, images, io=None, big_tiff=True, closefd=True):
+    def write(cls, images, io=None, big_tiff=True, closefd=True, tags=None, imagej_shape=None):
         '''
         Writes all `images` (which should be a list of 3D (H,W,C) numpy arrays).
         Returns the io object
 
         If `io` is a string, we write the image to that path,
         if `io` is None, we return a io.BytesIO (io.getbuffer() returns a buffer)
+        If `imagej` is a tuple: write this TCZ shape as ImageJ data description
         '''
         if io is None:
             io = Writer(_io.BytesIO())
@@ -67,9 +108,23 @@ class Tiff(tif_format.TifFormat):
         next_ifd_position = len(io) + 8
         write_offset(next_ifd_position)
 
+        Tag = tif_format.TifFormat.Tag
+        TagType = tif_format.TifFormat.TagType
+
+        tags = []
+        if imagej_shape:
+            imagej = '''ImageJ=1.51d
+images={}
+frames={}
+channels={}
+slices={}
+'''.format(len(images), *imagej_shape).encode('utf-8')
+            imagej += b'\x00'
+            tags += [(Tag.image_description, TagType.string, imagej)]
+
         for i, img in enumerate(images):
             io_data = Writer(_io.BytesIO())
-            cls._write_image(io, io_data, img, len(io), big_tiff)
+            cls._write_image(io, io_data, img, len(io), big_tiff, tags)
 
             if i == len(images) - 1:
                 next_ifd_position = 0
@@ -91,7 +146,7 @@ class Tiff(tif_format.TifFormat):
 
 
     @classmethod
-    def _write_image(cls, io_ifd, io_data, img, total_offset, big_tiff):
+    def _write_image(cls, io_ifd, io_data, img, total_offset, big_tiff, tags=None):
         Tag = tif_format.TifFormat.Tag
         TagType = tif_format.TifFormat.TagType
 
@@ -111,8 +166,8 @@ class Tiff(tif_format.TifFormat):
             'f': 3,
         }[img.dtype.kind]
 
-        # TODO: tags must be sorted
-        tags = [
+        tags = tags or []
+        tags += [
                 (Tag.image_length, TagType.u4, [height]),
                 (Tag.image_width, TagType.u4, [width]),
                 (Tag.photometric_interpretation, TagType.u2, [1]),
@@ -176,13 +231,17 @@ class Tiff(tif_format.TifFormat):
             TagType.s4: 4,
             TagType.s8: 8,
             TagType.s_ratio: 8,
+            TagType.string: len(values),
         }[typ]
 
         inline = itemsize * len(values) <= offset_width
 
         io = Writer(_io.BytesIO())
-        for v in values:
-            io.write_tag_value(typ, v, offset)
+        if typ == TagType.string:
+            io.write_tag_value(typ, values, offset)
+        else:
+            for v in values:
+                io.write_tag_value(typ, v, offset)
 
         if inline:
             io_now.write_bytes(io.get_bytes())

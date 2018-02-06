@@ -85,9 +85,12 @@ class Writer(object):
             TagType.s4:      '?i',
             TagType.s8:      '?q',
             TagType.s_ratio: '?ii',
+            TagType.string:  '?{}s',
         }[typ]
 
-        if typ not in (TagType.u_ratio, TagType.s_ratio):
+        if typ == TagType.string:
+            return self.pack(fmt.format(len(v)), v)
+        elif typ not in (TagType.u_ratio, TagType.s_ratio):
             return self.pack(fmt, v)
         else:
             return self.pack(fmt, *v)

@@ -49,6 +49,7 @@ class Image2d(object):
 
     @property
     def axes(self):
+        # ImageJ storage order is TZCXY
         desc = self.tags['image_description'][0].string
 
         images = re.search('images=([0-9])+', desc)
@@ -56,7 +57,7 @@ class Image2d(object):
         slices = re.search('slices=([0-9])+', desc)
         frames = re.search('frames=([0-9])+', desc)
 
-        axes = [('X', -3, self.width), ('Y', -2, self.height)]
+        axes = [('X', 999, self.width), ('Y', 888, self.height)]
         if channels:
             axes.append(('C', channels.start(), channels.group(1)))
         else:
@@ -214,7 +215,7 @@ class Image2d(object):
         tags = self.tags
         H = tags['image_length'][0]
         W = tags['image_width'][0]
-        C = self.n_channels
+        C = tags['samples_per_pixel'][0]
 
         strips = self.strips
         pos = strips[0].offset
@@ -230,5 +231,5 @@ class Image2d(object):
 
         array = np.memmap(strips[0].io._io, mode='r+', dtype=self.dtype,
                           shape=(H,W,C), offset=strips[0].offset)
-        return array
+        return np.squeeze(array)
 
