@@ -16,10 +16,9 @@ setup(
     install_requires=[
         'numpy',
         'bigtiff_lzw_decompress',
-        'kaitaistruct==0.7.99'
+        'kaitaistruct==0.8.0'
     ],
     dependency_links=[
       'git+http://animate-x3.dzne.ds/schoellingm/lzw-decompressor.git@master#egg=bigtiff_lzw_decompress-0.0.0',
-      'git+https://github.com/kaitai-io/kaitai_struct_python_runtime.git@fe935e58eb03bdcbb0186deaac8631912b8fa513#egg=kaitaistruct-0.7.99',
     ]
 )
