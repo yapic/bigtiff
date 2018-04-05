@@ -1,11 +1,11 @@
 import time
 import unittest
-
+import os
 import numpy as np
 
 from bigtiff import Tiff, PlaceHolder
 
-FILENAME = '/tmp/foo.tif'
+FILENAME = os.path.join(os.path.dirname(__file__),'foo.tif')
 
 class TestTiff(unittest.TestCase):
     def test_memmap(self):
@@ -37,7 +37,7 @@ class TestTiff(unittest.TestCase):
         '''Should only run on a Linux system with ext4 or XFS filesystem'''
         images = [PlaceHolder((20000, 10000, 1), 'uint8')]
         out = '/tmp/bar2.tif'
-        
+
         start = time.time()
 
         Tiff.write(images, io=out)
@@ -69,4 +69,3 @@ class TestTiff(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
