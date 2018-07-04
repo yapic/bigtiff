@@ -231,5 +231,8 @@ class Image2d(object):
 
         array = np.memmap(strips[0].io._io, mode='r+', dtype=self.dtype,
                           shape=(H,W,C), offset=strips[0].offset)
-        return np.squeeze(array)
 
+        if array.shape[-1] == 1:
+            return array[:, :, 0]
+        else:
+            return array

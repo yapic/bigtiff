@@ -18,26 +18,25 @@ class Tiff(tif_format.TifFormat):
         else:
             return Image2dIterator(self.header.first_ifd_big_tiff)
 
-    @classmethod
-    def from_file(cls, filename, closefd=True):
-        f = open(str(filename), 'br+') # we need write permission for memmap
-        try:
-            return cls(KaitaiStream(f))
-        except Exception:
-            if closefd:
-                f.close()
-            raise
 
-        if closefd:
-            f.close()
+    def __del__(self):
+        # close tiff file when object is destroyed
+        self._io.close()
 
     @classmethod
-    def memmap_tcz(cls, filename, closefd=False):
-        slices = [ s for s in cls.from_file(filename) ]
+    def from_file(cls, filename):
+        # we need write permission for memmap
+        f = open(str(filename), 'br+')
+
+        return cls(KaitaiStream(f))
+
+    @classmethod
+    def memmap_tcz(cls, filename):
+        slices = [s for s in cls.from_file(filename)]
 
         axes = slices[0].axes.copy()
         ax_keys = list(axes.keys())
-        assert 'X', 'Y' in ax_keys[-2:] # the plane must be XY or YX
+        assert 'X', 'Y' in ax_keys[-2:]  # the plane must be XY or YX
 
         if ax_keys[-2:] == ('Y', 'X'):
             t = lambda s: s.T
@@ -47,14 +46,20 @@ class Tiff(tif_format.TifFormat):
         samples_per_pixel = slices[0].tags['samples_per_pixel'][0]
 
         # we must trick numpy to create an array of objects
-        new = np.ascontiguousarray(['x'] * len(slices) * samples_per_pixel, dtype=np.dtype(object))
-        import itertools
+        new = np.ascontiguousarray(['x'] * len(slices) * samples_per_pixel,
+                                   dtype=np.dtype(object))
+
         for i, s in enumerate(slices):
+            array = s.memmap()
             if samples_per_pixel == 1:
-                new[i] = t(s.memmap())
+                assert array.ndim == 2
+                new[i] = t(array)
+
             else:
                 for j in range(samples_per_pixel):
-                    new[i * samples_per_pixel + j] = t(s.memmap()[:,:,j])
+                    assert array.ndim == 3
+                    new[i * samples_per_pixel + j] = t(array[:, :, j])
+
         new = np.reshape(new, list(axes.values())[:-2], order='F')
         slices = new
 
@@ -278,4 +283,3 @@ class PlaceHolder(object):
 
 if __name__ == '__main__':
     main()
-
