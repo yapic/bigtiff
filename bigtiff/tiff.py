@@ -50,11 +50,15 @@ class Tiff(tif_format.TifFormat):
                                    dtype=np.dtype(object))
 
         for i, s in enumerate(slices):
+            array = s.memmap()
             if samples_per_pixel == 1:
-                new[i] = t(s.memmap())
+                assert array.ndim == 2
+                new[i] = t(array)
+
             else:
                 for j in range(samples_per_pixel):
-                    new[i * samples_per_pixel + j] = t(s.memmap()[:, :, j])
+                    assert array.ndim == 3
+                    new[i * samples_per_pixel + j] = t(array[:, :, j])
 
         new = np.reshape(new, list(axes.values())[:-2], order='F')
         slices = new

@@ -22,7 +22,7 @@ class TestTiff(unittest.TestCase):
             for img in tif:
                 t = img.tags
 
-    @unittest.skip("FIXME test not working")
+    #@unittest.skip("FIXME test not working")
     def test_write_place_holder(self):
         images = [PlaceHolder((20, 10, 1), 'float32'), PlaceHolder((20, 10, 1), 'float32')]
         out = '/tmp/bar.tif'
@@ -31,10 +31,10 @@ class TestTiff(unittest.TestCase):
         with Tiff.from_file(out) as tif:
             for img in tif:
                 arr = img.memmap()
-                arr[0,0,0] = 99
-                arr[0,1,0] = 200
+                arr[0,0] = 99
+                arr[0,1] = 200
 
-    @unittest.skip("FIXME test not working")
+    # @unittest.skip("FIXME test not working")
     def test_write_place_holder_fast(self):
         '''Should only run on a Linux system with ext4 or XFS filesystem'''
         images = [PlaceHolder((20000, 10000, 1), 'uint8')]
@@ -47,8 +47,8 @@ class TestTiff(unittest.TestCase):
         with Tiff.from_file(out) as tif:
             for img in tif:
                 arr = img.memmap()
-                arr[0,0,0] = 99
-                arr[9999,9999,0] = 200
+                arr[0,0] = 99
+                arr[9999,9999] = 200
 
         end = time.time()
         assert end - start < 1 # sec
