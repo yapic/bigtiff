@@ -52,10 +52,10 @@ class Image2d(object):
         # ImageJ storage order is TZCXY
         desc = self.tags['image_description'][0].string
 
-        images = re.search('images=([0-9])+', desc)
-        channels = re.search('channels=([0-9])+', desc)
-        slices = re.search('slices=([0-9])+', desc)
-        frames = re.search('frames=([0-9])+', desc)
+        images = re.search('images=([0-9]+)', desc)
+        channels = re.search('channels=([0-9]+)', desc)
+        slices = re.search('slices=([0-9]+)', desc)
+        frames = re.search('frames=([0-9]+)', desc)
 
         axes = [('X', 999, self.width), ('Y', 888, self.height)]
         if channels:

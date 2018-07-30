@@ -105,6 +105,13 @@ class TestTiff(unittest.TestCase):
         assert isinstance(m[0, 0, 0], np.core.memmap)
         assert isinstance(m[0, 0, 1], np.core.memmap)
 
+    def test_memmap_tcz_big(self):
+        fname = os.path.join(os.path.dirname(__file__),
+                             'test_data/x1_y1_c10_z11_t12.tif')
+        m = Tiff.memmap_tcz(fname)
+        print(m[0].shape)
+        np.testing.assert_equal(len(m), 12)
+        np.testing.assert_array_equal(m[0].shape, (10,11))
 
 if __name__ == '__main__':
     unittest.main()
