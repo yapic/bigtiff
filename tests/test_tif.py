@@ -4,6 +4,7 @@ import os
 import numpy as np
 
 from bigtiff import Tiff, PlaceHolder
+from bigtiff.memmap import memmap as my_memmap
 
 FILENAME = os.path.join(os.path.dirname(__file__), 'foo.tif')
 
@@ -22,7 +23,6 @@ class TestTiff(unittest.TestCase):
             for img in tif:
                 t = img.tags
 
-    #@unittest.skip("FIXME test not working")
     def test_write_place_holder(self):
         images = [PlaceHolder((20, 10, 1), 'float32'), PlaceHolder((20, 10, 1), 'float32')]
         out = '/tmp/bar.tif'
@@ -34,7 +34,6 @@ class TestTiff(unittest.TestCase):
                 arr[0,0] = 99
                 arr[0,1] = 200
 
-    # @unittest.skip("FIXME test not working")
     def test_write_place_holder_fast(self):
         '''Should only run on a Linux system with ext4 or XFS filesystem'''
         images = [PlaceHolder((20000, 10000, 1), 'uint8')]
@@ -102,8 +101,8 @@ class TestTiff(unittest.TestCase):
 
         np.testing.assert_array_equal(m[0, 0, 0], expected_z0)
         np.testing.assert_array_equal(m[0, 0, 1], expected_z1)
-        assert isinstance(m[0, 0, 0], np.core.memmap)
-        assert isinstance(m[0, 0, 1], np.core.memmap)
+        assert isinstance(m[0, 0, 0], my_memmap)
+        assert isinstance(m[0, 0, 1], my_memmap)
 
     def test_memmap_tcz_big(self):
         fname = os.path.join(os.path.dirname(__file__),
