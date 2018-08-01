@@ -31,8 +31,13 @@ class Tiff(tif_format.TifFormat):
         return cls(KaitaiStream(f))
 
     @classmethod
+    def from_fd(cls, fd):
+        return cls(KaitaiStream(fd))
+
+    @classmethod
     def memmap_tcz(cls, filename):
-        slices = [s for s in cls.from_file(filename)]
+        fd = open(str(filename), 'br+')
+        slices = [s for s in cls.from_fd(fd)]
 
         axes = slices[0].axes.copy()
         ax_keys = list(axes.keys())

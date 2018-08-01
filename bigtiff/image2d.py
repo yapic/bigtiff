@@ -7,6 +7,7 @@ import numpy as np
 
 import bigtiff.tif_format
 from bigtiff.strip import Strip
+from bigtiff.memmap import memmap as my_memmap
 
 class Image2dIterator(object):
     def __init__(self, first_ifd):
@@ -229,7 +230,7 @@ class Image2d(object):
         if strips[0].compression != 1:
             raise NotImplementedError('Cannot memmap compressed images')
 
-        array = np.memmap(strips[0].io._io, mode='r+', dtype=self.dtype,
+        array = my_memmap(strips[0].io._io, mode='r+', dtype=self.dtype,
                           shape=(H,W,C), offset=strips[0].offset)
 
         if array.shape[-1] == 1:
