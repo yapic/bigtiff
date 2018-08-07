@@ -10,6 +10,10 @@ import numpy as np
 from numpy.core.numeric import uint8, ndarray, dtype
 from numpy.compat import long, basestring, is_pathlib_path
 
+import ctypes.util
+libc = ctypes.util.find_library('c')
+libc = ctypes.CDLL(libc)
+
 __all__ = ['memmap']
 
 dtypedescr = dtype
@@ -269,17 +273,15 @@ class memmap(ndarray):
         array_offset = offset - start
         # --- begin edit ---
         # mm = mmap.mmap(fid.fileno(), bytes, access=acc, offset=start)
-        import ctypes.util
-        libc = ctypes.util.find_library('c')
-        libc = ctypes.CDLL(libc)
         libc.mmap.restype = ctypes.POINTER(ctypes.c_char)
-        mm = libc.mmap(None, bytes, acc, mmap.MAP_PRIVATE, fid.fileno(), start)
-        mm = ctypes.string_at(mm, bytes)
+        addr = libc.mmap(None, bytes, acc, mmap.MAP_PRIVATE, fid.fileno(), start)
+        mm = ctypes.string_at(addr, bytes)
         mm = bytearray(mm)
-        # --- end edit ---
 
         self = ndarray.__new__(subtype, shape, dtype=descr, buffer=mm,
                                offset=array_offset, order=order)
+        self._addr = addr
+        # --- end edit ---
         self._mmap = mm
         self.offset = offset
         self.mode = mode
@@ -304,11 +306,13 @@ class memmap(ndarray):
     def __array_finalize__(self, obj):
         if hasattr(obj, '_mmap') and np.may_share_memory(self, obj):
             self._mmap = obj._mmap
+            self._addr = obj._addr
             self.filename = obj.filename
             self.offset = obj.offset
             self.mode = obj.mode
         else:
             self._mmap = None
+            self._addr = None
             self.filename = None
             self.offset = None
             self.mode = None
@@ -352,3 +356,6 @@ class memmap(ndarray):
             return res.view(type=ndarray)
         return res
 
+    def __del__(self):
+        if hasattr(self, '_addr') and self._mmap is not None:
+          libc.munmap(self._addr, len(self._mmap))
