@@ -232,6 +232,8 @@ class Image2d(object):
 
         array = my_memmap(strips[0].io._io, mode='r+', dtype=self.dtype,
                           shape=(H,W,C), offset=strips[0].offset)
+        # array = np.memmap(strips[0].io._io, mode='r+', dtype=self.dtype,
+        #                   shape=(H,W,C), offset=strips[0].offset)
 
         if array.shape[-1] == 1:
             return array[:, :, 0]

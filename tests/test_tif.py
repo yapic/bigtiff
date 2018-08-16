@@ -2,10 +2,10 @@ import time
 import unittest
 import os
 import numpy as np
-
+import shutil
 from bigtiff import Tiff, PlaceHolder
 from bigtiff.memmap import memmap as my_memmap
-
+base_path = os.path.dirname(__file__)
 FILENAME = os.path.join(os.path.dirname(__file__), 'foo.tif')
 
 class TestTiff(unittest.TestCase):
@@ -33,6 +33,39 @@ class TestTiff(unittest.TestCase):
                 arr = img.memmap()
                 arr[0,0] = 99
                 arr[0,1] = 200
+
+    def test_write_pixels(self):
+        print('start')
+        savedir = os.path.join(base_path, 'tmp')
+        shutil.rmtree(savedir)
+        os.makedirs(savedir)
+        images = [PlaceHolder((20, 10, 1), 'uint8'), PlaceHolder((20, 10, 1), 'float32')]
+        path = os.path.join(savedir, 'test_write_pixels.tif')
+        Tiff.write(images, io=path)
+
+        with Tiff.from_file(path) as tif:
+                slices = [img.memmap() for img in tif]
+
+        assert slices[0].shape == (20, 10)
+        assert slices[1].shape == (20, 10)
+        slices[0][:, :5] = 255
+        assert np.all(slices[0][:, :5] == 255)
+        print('done')
+
+        slices = None
+        import gc
+        gc.collect()
+        print('end')
+
+        with Tiff.from_file(path) as tif:
+                slices = [img.memmap() for img in tif]
+        assert (slices[0][:, :5] == 255).all()
+        assert (slices[0][:, 5:] == 0).all()
+        assert (slices[1] == 0).all()
+
+
+
+
 
     def test_write_place_holder_fast(self):
         '''Should only run on a Linux system with ext4 or XFS filesystem'''
