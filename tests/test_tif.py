@@ -10,15 +10,19 @@ FILENAME = os.path.join(os.path.dirname(__file__), 'foo.tif')
 
 class TestTiff(unittest.TestCase):
 
-    @unittest.skip("FIXME test not working")
+    #@unittest.skip("FIXME test not working")
     def test_memmap(self):
+        FILENAME = os.path.join(os.path.dirname(__file__),
+                             'test_data/x15_y10_z2_c1.tif')
         with Tiff.from_file(FILENAME) as tif:
             for img in tif:
                 arr = img.memmap()
-                arr[:10, :10, 0] = 99
+
 
 
     def test_load(self):
+        FILENAME = os.path.join(os.path.dirname(__file__),
+                             'test_data/x15_y10_z2_c1.tif')
         with Tiff.from_file(FILENAME) as tif:
             for img in tif:
                 t = img.tags
@@ -37,7 +41,7 @@ class TestTiff(unittest.TestCase):
     def test_write_pixels(self):
         print('start')
         savedir = os.path.join(base_path, 'tmp')
-        shutil.rmtree(savedir)
+        shutil.rmtree(savedir, ignore_errors=True)
         os.makedirs(savedir)
         images = [PlaceHolder((20, 10, 1), 'uint8'), PlaceHolder((20, 10, 1), 'float32')]
         path = os.path.join(savedir, 'test_write_pixels.tif')

@@ -9,6 +9,7 @@ from __future__ import division, absolute_import, print_function
 import numpy as np
 from numpy.core.numeric import uint8, ndarray, dtype
 from numpy.compat import long, basestring, is_pathlib_path
+import collections
 
 import ctypes.util
 libc = ctypes.util.find_library('c')
@@ -20,6 +21,8 @@ dtypedescr = dtype
 valid_filemodes = ["r", "c", "r+", "w+"]
 writeable_filemodes = ["r+", "w+"]
 
+refcount = collections.defaultdict(lambda: 0)
+open_addresses = {}
 mode_equivalents = {
     "readonly":"r",
     "copyonwrite":"c",
@@ -240,12 +243,12 @@ class memmap(ndarray):
         _dbytes = descr.itemsize
 
         if shape is None:
-            bytes = flen - offset
-            if (bytes % _dbytes):
+            bytelen = flen - offset
+            if (bytelen % _dbytes):
                 fid.close()
                 raise ValueError("Size of available data is not a "
                         "multiple of the data-type size.")
-            size = bytes // _dbytes
+            size = bytelen // _dbytes
             shape = (size,)
         else:
             if not isinstance(shape, tuple):
@@ -254,10 +257,10 @@ class memmap(ndarray):
             for k in shape:
                 size *= k
 
-        bytes = long(offset + size*_dbytes)
+        bytelen = long(offset + size*_dbytes)
 
-        if mode == 'w+' or (mode == 'r+' and flen < bytes):
-            fid.seek(bytes - 1, 0)
+        if mode == 'w+' or (mode == 'r+' and flen < bytelen):
+            fid.seek(bytelen - 1, 0)
             fid.write(b'\0')
             fid.flush()
 
@@ -269,17 +272,26 @@ class memmap(ndarray):
             acc = mmap.ACCESS_WRITE
 
         start = offset - offset % mmap.ALLOCATIONGRANULARITY
-        bytes -= start
+        bytelen -= start
         array_offset = offset - start
         # --- begin edit ---
-        # mm = mmap.mmap(fid.fileno(), bytes, access=acc, offset=start)
-        libc.mmap.restype = ctypes.POINTER(ctypes.c_char)
-        addr = libc.mmap(None, bytes, acc, mmap.MAP_SHARED, fid.fileno(), start)
-        mm = ctypes.string_at(addr, bytes)
-        mm = bytearray(mm)
+        #to avoid cloning fid, we use libc.mmap directly
+
+        # mm = mmap.mmap(fid.fileno(), bytelen, access=acc, offset=start)
+
+        key = (fid.name, start, bytelen)
+        addr = open_addresses.get(key)
+        if addr is None:
+            libc.mmap.restype = ctypes.c_void_p
+            addr = libc.mmap(None, bytelen, acc, mmap.MAP_SHARED, fid.fileno(),
+                             start)
+            open_addresses[key] = addr
+        refcount[key] += 1
+        mm = (ctypes.c_char * bytelen).from_address(addr)
 
         self = ndarray.__new__(subtype, shape, dtype=descr, buffer=mm,
                                offset=array_offset, order=order)
+        self._key = key
         self._addr = addr
         # --- end edit ---
         self._mmap = mm
@@ -307,12 +319,14 @@ class memmap(ndarray):
         if hasattr(obj, '_mmap') and np.may_share_memory(self, obj):
             self._mmap = obj._mmap
             self._addr = obj._addr
+            self._key = obj._key
             self.filename = obj.filename
             self.offset = obj.offset
             self.mode = obj.mode
         else:
             self._mmap = None
             self._addr = None
+            self._key = None
             self.filename = None
             self.offset = None
             self.mode = None
@@ -356,13 +370,15 @@ class memmap(ndarray):
             return res.view(type=ndarray)
         return res
 
-
     def __del__(self):
-        if hasattr(self, '_addr') and self._mmap is not None:
-          import os
-          for i in 0,1,2,3,4:
-            x = libc.msync(self._addr, len(self._mmap), i)
-            e = ctypes.get_errno()
-          print(x, e)
-          print(os.strerror(e))
-          libc.munmap(self._addr, len(self._mmap))
+        if hasattr(self, '_key') and hasattr(self, '_addr') and self._mmap is not None:
+            key = self._key
+            addr = open_addresses.get(key)
+            if addr is None:
+                return
+
+            refcount[key] -= 1
+            if refcount[key] == 0:
+                libc.munmap(addr, len(self._mmap))
+                del refcount[key]
+                del open_addresses[key]
