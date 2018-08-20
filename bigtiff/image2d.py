@@ -231,9 +231,7 @@ class Image2d(object):
             raise NotImplementedError('Cannot memmap compressed images')
 
         array = my_memmap(strips[0].io._io, mode='r+', dtype=self.dtype,
-                          shape=(H,W,C), offset=strips[0].offset)
-        # array = np.memmap(strips[0].io._io, mode='r+', dtype=self.dtype,
-        #                   shape=(H,W,C), offset=strips[0].offset)
+                          shape=(H, W, C), offset=strips[0].offset)
 
         if array.shape[-1] == 1:
             return array[:, :, 0]
