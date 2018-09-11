@@ -4,7 +4,7 @@ import os
 import numpy as np
 import shutil
 from bigtiff import Tiff, PlaceHolder
-from bigtiff.memmap import memmap as my_memmap
+from numpy import memmap as my_memmap
 base_path = os.path.dirname(__file__)
 FILENAME = os.path.join(os.path.dirname(__file__), 'foo.tif')
 
