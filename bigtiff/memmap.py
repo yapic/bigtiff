@@ -1,384 +1,56 @@
-#
-# This file is an EXACT COPY of numpy's memmap, but it uses
-# a custom call to mmap because Python's mmap.mmap duplicates
-# the file descriptor and we don't want that!
-#
-
-from __future__ import division, absolute_import, print_function
-
-import numpy as np
-from numpy.core.numeric import uint8, ndarray, dtype
-from numpy.compat import long, basestring, is_pathlib_path
-import collections
-
 import ctypes.util
+from mmap import MAP_SHARED
+import os
+
+INVALID_POINTER = ctypes.c_void_p(-1).value
+
+def check_mmap(addr, func, args):
+    errno = ctypes.get_errno()
+    err = os.strerror(errno)
+    assert addr != INVALID_POINTER, 'mmap() failed: {}'.format(err)
+    return addr
+
+
+def check_munmap(ret, func, args):
+    errno = ctypes.get_errno()
+    assert ret != -1, 'munmap() failed: {}'.format(os.strerror(errno))
+
+
 libc = ctypes.util.find_library('c')
 libc = ctypes.CDLL(libc)
 
-__all__ = ['memmap']
+libc.mmap.argtypes = (ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int,
+                      ctypes.c_int, ctypes.c_int, ctypes.c_size_t)
+libc.mmap.restype = ctypes.c_void_p
+libc.mmap.errcheck = check_mmap
+
+libc.munmap.argtypes = (ctypes.c_void_p, ctypes.c_size_t)
+libc.munmap.restype = ctypes.c_int
+libc.munmap.errcheck = check_munmap
+
+from numpy.core import memmap as np_memmap
+import unittest.mock
+
+def memmap(*args, **kwds):
+    '''
+    Works just like the ordinary numpy.memmap() but does not
+    open an additional file descriptor.
+    '''
+    with unittest.mock.patch('mmap.mmap', new=mmap):
+        arr = np_memmap(*args, **kwds)
+    return arr
+
+
+def mmap(fileno, bytelen, access=None, offset=0):
+    '''
+    Works just like the ordinary mmap.mmap() but does not
+    open an additional file descriptor.
+    '''
+    buffer_type = ctypes.c_char * bytelen
+    class MMap(buffer_type):
+        def __del__(self):
+            libc.munmap(addr, bytelen)
+
+    addr = libc.mmap(None, bytelen, access, MAP_SHARED, fileno, offset)
+    return MMap.from_address(addr)
 
-dtypedescr = dtype
-valid_filemodes = ["r", "c", "r+", "w+"]
-writeable_filemodes = ["r+", "w+"]
-
-refcount = collections.defaultdict(lambda: 0)
-open_addresses = {}
-mode_equivalents = {
-    "readonly":"r",
-    "copyonwrite":"c",
-    "readwrite":"r+",
-    "write":"w+"
-    }
-
-class memmap(ndarray):
-    """Create a memory-map to an array stored in a *binary* file on disk.
-
-    Memory-mapped files are used for accessing small segments of large files
-    on disk, without reading the entire file into memory.  NumPy's
-    memmap's are array-like objects.  This differs from Python's ``mmap``
-    module, which uses file-like objects.
-
-    This subclass of ndarray has some unpleasant interactions with
-    some operations, because it doesn't quite fit properly as a subclass.
-    An alternative to using this subclass is to create the ``mmap``
-    object yourself, then create an ndarray with ndarray.__new__ directly,
-    passing the object created in its 'buffer=' parameter.
-
-    This class may at some point be turned into a factory function
-    which returns a view into an mmap buffer.
-
-    Delete the memmap instance to close the memmap file.
-
-
-    Parameters
-    ----------
-    filename : str, file-like object, or pathlib.Path instance
-        The file name or file object to be used as the array data buffer.
-    dtype : data-type, optional
-        The data-type used to interpret the file contents.
-        Default is `uint8`.
-    mode : {'r+', 'r', 'w+', 'c'}, optional
-        The file is opened in this mode:
-
-        +------+-------------------------------------------------------------+
-        | 'r'  | Open existing file for reading only.                        |
-        +------+-------------------------------------------------------------+
-        | 'r+' | Open existing file for reading and writing.                 |
-        +------+-------------------------------------------------------------+
-        | 'w+' | Create or overwrite existing file for reading and writing.  |
-        +------+-------------------------------------------------------------+
-        | 'c'  | Copy-on-write: assignments affect data in memory, but       |
-        |      | changes are not saved to disk.  The file on disk is         |
-        |      | read-only.                                                  |
-        +------+-------------------------------------------------------------+
-
-        Default is 'r+'.
-    offset : int, optional
-        In the file, array data starts at this offset. Since `offset` is
-        measured in bytes, it should normally be a multiple of the byte-size
-        of `dtype`. When ``mode != 'r'``, even positive offsets beyond end of
-        file are valid; The file will be extended to accommodate the
-        additional data. By default, ``memmap`` will start at the beginning of
-        the file, even if ``filename`` is a file pointer ``fp`` and
-        ``fp.tell() != 0``.
-    shape : tuple, optional
-        The desired shape of the array. If ``mode == 'r'`` and the number
-        of remaining bytes after `offset` is not a multiple of the byte-size
-        of `dtype`, you must specify `shape`. By default, the returned array
-        will be 1-D with the number of elements determined by file size
-        and data-type.
-    order : {'C', 'F'}, optional
-        Specify the order of the ndarray memory layout:
-        :term:`row-major`, C-style or :term:`column-major`,
-        Fortran-style.  This only has an effect if the shape is
-        greater than 1-D.  The default order is 'C'.
-
-    Attributes
-    ----------
-    filename : str or pathlib.Path instance
-        Path to the mapped file.
-    offset : int
-        Offset position in the file.
-    mode : str
-        File mode.
-
-    Methods
-    -------
-    flush
-        Flush any changes in memory to file on disk.
-        When you delete a memmap object, flush is called first to write
-        changes to disk before removing the object.
-
-
-    See also
-    --------
-    lib.format.open_memmap : Create or load a memory-mapped ``.npy`` file.
-
-    Notes
-    -----
-    The memmap object can be used anywhere an ndarray is accepted.
-    Given a memmap ``fp``, ``isinstance(fp, numpy.ndarray)`` returns
-    ``True``.
-
-    Memory-mapped files cannot be larger than 2GB on 32-bit systems.
-
-    When a memmap causes a file to be created or extended beyond its
-    current size in the filesystem, the contents of the new part are
-    unspecified. On systems with POSIX filesystem semantics, the extended
-    part will be filled with zero bytes.
-
-    Examples
-    --------
-    >>> data = np.arange(12, dtype='float32')
-    >>> data.resize((3,4))
-
-    This example uses a temporary file so that doctest doesn't write
-    files to your directory. You would use a 'normal' filename.
-
-    >>> from tempfile import mkdtemp
-    >>> import os.path as path
-    >>> filename = path.join(mkdtemp(), 'newfile.dat')
-
-    Create a memmap with dtype and shape that matches our data:
-
-    >>> fp = np.memmap(filename, dtype='float32', mode='w+', shape=(3,4))
-    >>> fp
-    memmap([[ 0.,  0.,  0.,  0.],
-            [ 0.,  0.,  0.,  0.],
-            [ 0.,  0.,  0.,  0.]], dtype=float32)
-
-    Write data to memmap array:
-
-    >>> fp[:] = data[:]
-    >>> fp
-    memmap([[  0.,   1.,   2.,   3.],
-            [  4.,   5.,   6.,   7.],
-            [  8.,   9.,  10.,  11.]], dtype=float32)
-
-    >>> fp.filename == path.abspath(filename)
-    True
-
-    Deletion flushes memory changes to disk before removing the object:
-
-    >>> del fp
-
-    Load the memmap and verify data was stored:
-
-    >>> newfp = np.memmap(filename, dtype='float32', mode='r', shape=(3,4))
-    >>> newfp
-    memmap([[  0.,   1.,   2.,   3.],
-            [  4.,   5.,   6.,   7.],
-            [  8.,   9.,  10.,  11.]], dtype=float32)
-
-    Read-only memmap:
-
-    >>> fpr = np.memmap(filename, dtype='float32', mode='r', shape=(3,4))
-    >>> fpr.flags.writeable
-    False
-
-    Copy-on-write memmap:
-
-    >>> fpc = np.memmap(filename, dtype='float32', mode='c', shape=(3,4))
-    >>> fpc.flags.writeable
-    True
-
-    It's possible to assign to copy-on-write array, but values are only
-    written into the memory copy of the array, and not written to disk:
-
-    >>> fpc
-    memmap([[  0.,   1.,   2.,   3.],
-            [  4.,   5.,   6.,   7.],
-            [  8.,   9.,  10.,  11.]], dtype=float32)
-    >>> fpc[0,:] = 0
-    >>> fpc
-    memmap([[  0.,   0.,   0.,   0.],
-            [  4.,   5.,   6.,   7.],
-            [  8.,   9.,  10.,  11.]], dtype=float32)
-
-    File on disk is unchanged:
-
-    >>> fpr
-    memmap([[  0.,   1.,   2.,   3.],
-            [  4.,   5.,   6.,   7.],
-            [  8.,   9.,  10.,  11.]], dtype=float32)
-
-    Offset into a memmap:
-
-    >>> fpo = np.memmap(filename, dtype='float32', mode='r', offset=16)
-    >>> fpo
-    memmap([  4.,   5.,   6.,   7.,   8.,   9.,  10.,  11.], dtype=float32)
-
-    """
-
-    __array_priority__ = -100.0
-
-    def __new__(subtype, filename, dtype=uint8, mode='r+', offset=0,
-                shape=None, order='C'):
-        # Import here to minimize 'import numpy' overhead
-        import mmap
-        import os.path
-        try:
-            mode = mode_equivalents[mode]
-        except KeyError:
-            if mode not in valid_filemodes:
-                raise ValueError("mode must be one of %s" %
-                                 (valid_filemodes + list(mode_equivalents.keys())))
-
-        if hasattr(filename, 'read'):
-            fid = filename
-            own_file = False
-        elif is_pathlib_path(filename):
-            fid = filename.open((mode == 'c' and 'r' or mode)+'b')
-            own_file = True
-        else:
-            fid = open(filename, (mode == 'c' and 'r' or mode)+'b')
-            own_file = True
-
-        if (mode == 'w+') and shape is None:
-            raise ValueError("shape must be given")
-
-        fid.seek(0, 2)
-        flen = fid.tell()
-        descr = dtypedescr(dtype)
-        _dbytes = descr.itemsize
-
-        if shape is None:
-            bytelen = flen - offset
-            if (bytelen % _dbytes):
-                fid.close()
-                raise ValueError("Size of available data is not a "
-                        "multiple of the data-type size.")
-            size = bytelen // _dbytes
-            shape = (size,)
-        else:
-            if not isinstance(shape, tuple):
-                shape = (shape,)
-            size = np.intp(1)  # avoid default choice of np.int_, which might overflow
-            for k in shape:
-                size *= k
-
-        bytelen = long(offset + size*_dbytes)
-
-        if mode == 'w+' or (mode == 'r+' and flen < bytelen):
-            fid.seek(bytelen - 1, 0)
-            fid.write(b'\0')
-            fid.flush()
-
-        if mode == 'c':
-            acc = mmap.ACCESS_COPY
-        elif mode == 'r':
-            acc = mmap.ACCESS_READ
-        else:
-            acc = mmap.ACCESS_WRITE
-
-        start = offset - offset % mmap.ALLOCATIONGRANULARITY
-        bytelen -= start
-        array_offset = offset - start
-        # --- begin edit ---
-        #to avoid cloning fid, we use libc.mmap directly
-
-        # mm = mmap.mmap(fid.fileno(), bytelen, access=acc, offset=start)
-
-        key = (fid.name, start, bytelen)
-        addr = open_addresses.get(key)
-        if addr is None:
-            libc.mmap.restype = ctypes.c_void_p
-            addr = libc.mmap(None, bytelen, acc, mmap.MAP_SHARED, fid.fileno(),
-                             start)
-            open_addresses[key] = addr
-        refcount[key] += 1
-        mm = (ctypes.c_char * bytelen).from_address(addr)
-
-        self = ndarray.__new__(subtype, shape, dtype=descr, buffer=mm,
-                               offset=array_offset, order=order)
-        self._key = key
-        self._addr = addr
-        # --- end edit ---
-        self._mmap = mm
-        self.offset = offset
-        self.mode = mode
-
-        if isinstance(filename, basestring):
-            self.filename = os.path.abspath(filename)
-        elif is_pathlib_path(filename):
-            self.filename = filename.resolve()
-        # py3 returns int for TemporaryFile().name
-        elif (hasattr(filename, "name") and
-              isinstance(filename.name, basestring)):
-            self.filename = os.path.abspath(filename.name)
-        # same as memmap copies (e.g. memmap + 1)
-        else:
-            self.filename = None
-
-        if own_file:
-            fid.close()
-
-        return self
-
-    def __array_finalize__(self, obj):
-        if hasattr(obj, '_mmap') and np.may_share_memory(self, obj):
-            self._mmap = obj._mmap
-            self._addr = obj._addr
-            self._key = obj._key
-            self.filename = obj.filename
-            self.offset = obj.offset
-            self.mode = obj.mode
-        else:
-            self._mmap = None
-            self._addr = None
-            self._key = None
-            self.filename = None
-            self.offset = None
-            self.mode = None
-
-    def flush(self):
-        """
-        Write any changes in the array to the file on disk.
-
-        For further information, see `memmap`.
-
-        Parameters
-        ----------
-        None
-
-        See Also
-        --------
-        memmap
-
-        """
-        if self.base is not None and hasattr(self.base, 'flush'):
-            self.base.flush()
-
-    def __array_wrap__(self, arr, context=None):
-        arr = super(memmap, self).__array_wrap__(arr, context)
-
-        # Return a memmap if a memmap was given as the output of the
-        # ufunc. Leave the arr class unchanged if self is not a memmap
-        # to keep original memmap subclasses behavior
-        if self is arr or type(self) is not memmap:
-            return arr
-        # Return scalar instead of 0d memmap, e.g. for np.sum with
-        # axis=None
-        if arr.shape == ():
-            return arr[()]
-        # Return ndarray otherwise
-        return arr.view(np.ndarray)
-
-    def __getitem__(self, index):
-        res = super(memmap, self).__getitem__(index)
-        if type(res) is memmap and res._mmap is None:
-            return res.view(type=ndarray)
-        return res
-
-    def __del__(self):
-        if hasattr(self, '_key') and hasattr(self, '_addr') and self._mmap is not None:
-            key = self._key
-            addr = open_addresses.get(key)
-            if addr is None:
-                return
-
-            refcount[key] -= 1
-            if refcount[key] == 0:
-                libc.munmap(addr, len(self._mmap))
-                del refcount[key]
-                del open_addresses[key]
