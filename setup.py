@@ -18,7 +18,4 @@ setup(
         'bigtiff_lzw_decompress @ git+http://animate-x3.dzne.ds/idaf/lzw-decompressor.git@master',
         'kaitaistruct==0.8.0'
     ],
-    dependency_links=[
-      'git+http://animate-x3.dzne.ds/idaf/lzw-decompressor.git@master#egg=bigtiff_lzw_decompress-0.0.0',
-    ]
 )
