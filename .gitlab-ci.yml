@@ -13,6 +13,7 @@ install:
   image: yapic-nopython
   stage: test
   script:
+    - pip install --upgrade pip
     - pip install Cython nose
-    - pip install --process-dependency-links ${CI_PROJECT_DIR}
+    - pip install ${CI_PROJECT_DIR}
     - nosetests ${CI_PROJECT_DIR}/.
