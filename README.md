@@ -29,4 +29,6 @@ with Tiff.from_file(fname) as tif:
 Installation
 ------------
 
-Run `pip3 install 'http://github.com/yapic/bigtiff/repository/master/archive.zip'`
+```
+pip install git+https://github.com/yapic/bigtiff.git@master
+```
