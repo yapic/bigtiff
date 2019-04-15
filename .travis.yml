@@ -5,7 +5,6 @@ python:
 # command to install dependencies
 install:
   - pip install Cython nose
-  - pip install git+http://github.com/yapic/lzw-decompressor.git@master
   - pip install .
 # command to run tests
 script:
