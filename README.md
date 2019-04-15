@@ -27,5 +27,4 @@ with Tiff.from_file(fname) as tif:
 Installation
 ------------
 
-Run `pip3 install 'http://animate-x3.dzne.ds/schoellingm/tiff/repository/master/archive.zip' --trusted-host animate-x3.dzne.ds --process-dependency-links`
-
+Run `pip3 install 'http://github.com/yapic/bigtiff/repository/master/archive.zip' --trusted-host animate-x3.dzne.ds --process-dependency-links`
