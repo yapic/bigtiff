@@ -10,7 +10,7 @@ stages:
   - deploy
 
 install:
-  image: yapic-nopython
+  image: python:3.6
   stage: test
   script:
     - pip install --upgrade pip
