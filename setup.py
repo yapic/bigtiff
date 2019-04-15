@@ -15,7 +15,6 @@ setup(
     zip_safe=False,
     install_requires=[
         'numpy',
-        'bigtiff_lzw_decompress @ git+http://github.com/yapic/lzw-decompressor.git@master',
         'kaitaistruct==0.8.0'
     ],
 )

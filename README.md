@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/yapic/bigtiff.svg?branch=master)](https://travis-ci.com/yapic/bigtiff)
+
 BigTiff
 =======
 
@@ -27,4 +29,4 @@ with Tiff.from_file(fname) as tif:
 Installation
 ------------
 
-Run `pip3 install 'http://github.com/yapic/bigtiff/repository/master/archive.zip' --trusted-host animate-x3.dzne.ds --process-dependency-links`
+Run `pip3 install 'http://github.com/yapic/bigtiff/repository/master/archive.zip'`
