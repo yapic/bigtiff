@@ -1,7 +1,5 @@
 import numpy as np
 
-import bigtiff_lzw_decompress
-
 class Strip(object):
     def __init__(self, io, offset, length, compression):
         self.io = io
@@ -27,4 +25,3 @@ class Strip(object):
     def __repr__(self):
         msg = '<Strip offset=0x{:x} len={} compression={}>'
         return msg.format(self.offset, self.length, self.compression)
-

@@ -9,3 +9,6 @@ __pycache__
 
 # tempfiles from tests
 tests/tmp/
+
+build/
+dist/
